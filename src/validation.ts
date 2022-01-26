@@ -7,8 +7,9 @@ export class Validator<T> {
     private validationFunction: (
       value: unknown,
       context: Context,
-      path: Path
-    ) => Validation<T>
+      path: Path,
+    ) => Validation<T>,
+    private mapper: Mapper<T> = defaultMapper<T>()
   ) {}
 
   // Phantom type
@@ -29,7 +30,7 @@ export class Validator<T> {
    * Maps the validated value or do nothing if this validator returned an error.
    */
   map<B>(fn: (value: T) => B): Validator<B> {
-    return this.and(v => Ok(fn(v)))
+    return this.mapper.apply(this, fn)
   }
 
   /**
@@ -125,6 +126,18 @@ export class Validator<T> {
       v === null || v === undefined ? defaultValue : v
     )
   }
+}
+
+interface Mapper<T> {
+  apply<B>(vt: Validator<T>, fn: (value: T) => B): Validator<B>
+}
+
+function defaultMapper<T>(): Mapper<T> {
+  return ({
+    apply<B>(vt: Validator<T>, fn: (value: T) => B): Validator<B> {
+      return vt.and(vb => Ok(fn(vb)))
+    }
+  })
 }
 
 export type Ok<VALUE> = { ok: true; value: VALUE }
@@ -313,6 +326,19 @@ export type ObjectOf<P extends Props> = ObjectWithOptionalKeysOf<Unpack<P>>
 type ObjectValidator<P extends Props> = Validator<ObjectOf<P>> & { props: P }
 
 export function object<P extends Props>(props: P): ObjectValidator<P> {
+  const mapper: Mapper<ObjectOf<P>> = ({
+    apply<B>(
+      vt: Validator<ObjectOf<P>>,
+      fn: (value: ObjectOf<P>) => B,
+    ): Validator<B> {
+      const mapped = vt.and(vb => Ok(fn(vb)))
+
+      ;(mapped as any).props = props
+
+      return mapped
+    }
+  })
+
   const validator = new Validator((v, context, p) => {
     if (v == null || typeof v !== 'object') return typeFailure(v, p, 'object')
 
@@ -341,7 +367,7 @@ export function object<P extends Props>(props: P): ObjectValidator<P> {
       }
     }
     return errors.length ? Err(errors) : Ok(validatedObject)
-  })
+  }, mapper)
 
   ;(validator as any).props = props
   return validator as ObjectValidator<P>

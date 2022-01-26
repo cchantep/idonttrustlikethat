@@ -179,7 +179,7 @@ describe('validation core', () => {
     }
   })
 
-  it('can expose object props', () => {
+  it('can expose object props and map', () => {
     const obj = {
       id: v.number,
       name: v.string,
@@ -192,6 +192,12 @@ describe('validation core', () => {
     const person = v.object(obj)
 
     expect(person.props).toBe(obj)
+
+    const mapped = person.map(p => {
+      return { ...p, _id: p.id }
+    })
+
+    expect((mapped as any).props).toBe(obj) // Keep original props
   })
 
   it('can validate a dictionary', () => {
